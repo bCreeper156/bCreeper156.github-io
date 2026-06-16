@@ -1,12 +1,12 @@
 /**
- * nope.js - 全站统一弹窗组件（主站自动屏蔽版 + 关闭后重置 + 主站文字纯文本）
- * 功能：仅在非主站页面每次访问时弹窗，引导前往主站并同步当前路径。
- * 版本：2.3.0
+ * nope.js - 全站统一弹窗组件（主站自动屏蔽版 + 今日不再提示 + 主站文字纯文本）
+ * 功能：仅在非主站页面且今日未关闭时弹窗，引导前往主站并同步当前路径。
+ * 版本：2.4.0
  */
 
 (function() {
     // ======================== 配置 ========================
-    const STORAGE_KEY = 'creeper156_popup_main_site_shown';
+    const STORAGE_KEY = 'creeper156_popup_main_site_hide_date'; // 变更键名，专门记录日期
     const MAIN_SITE_DOMAIN = '156blog.pages.dev';
     const MAIN_SITE_PROTOCOL = 'https://';
     const POPUP_DELAY = 200;
@@ -26,9 +26,17 @@
         return currentHost === MAIN_SITE_DOMAIN || currentHost === `www.${MAIN_SITE_DOMAIN}`;
     }
 
-    // 弹窗 HTML（主站文字为纯文本，无超链接）
+    // 获取今天的日期字符串（格式：YYYY-MM-DD）
+    function getTodayString() {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    // 弹窗 HTML（更新底部文案）
     const createPopupHTML = () => {
-        const targetUrl = getTargetMainUrl();
         return `
         <div id="nope-popup-overlay" class="nope-overlay">
             <div class="nope-popup-container">
@@ -43,12 +51,12 @@
                     <button class="nope-btn nope-btn-primary" id="nope-go-main">前往主站 →</button>
                     <button class="nope-btn nope-btn-secondary" id="nope-close-popup">暂不，关闭</button>
                 </div>
-                <p class="nope-popup-footnote">关闭后将重置，下次访问仍会提示</p>
+                <p class="nope-popup-footnote">今日不再提示，下次访问仍会提示</p>
             </div>
         </div>
     `;};
 
-    // 注入样式（不变）
+    // 注入样式（保持不变）
     const injectStyles = () => {
         const styleId = 'nope-popup-styles';
         if (document.getElementById(styleId)) return;
@@ -116,17 +124,6 @@
                 color: #4b5563;
                 margin: 16px 0 12px;
                 line-height: 1.5;
-            }
-            .nope-link {
-                color: #2c7be5;
-                text-decoration: none;
-                font-weight: 600;
-                border-bottom: 1px dashed #9ac8ff;
-                transition: color 0.2s, border-color 0.2s;
-            }
-            .nope-link:hover {
-                color: #1a56db;
-                border-bottom-color: #1a56db;
             }
             .nope-popup-actions {
                 display: flex;
@@ -198,15 +195,19 @@
         if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
     };
 
-    // 关闭弹窗并重置存储（删除键，下次仍会弹窗）
-    const closeAndReset = () => {
-        try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    // 点击关闭：记录今天的日期，今日内不再弹窗
+    const closeAndSaveDate = () => {
+        try { 
+            localStorage.setItem(STORAGE_KEY, getTodayString()); 
+        } catch(e) {}
         removePopup();
     };
 
-    // 前往主站（新标签页，同步路径）并重置存储
+    // 前往主站：同样记录日期，避免用户返回备用站时立刻又弹出来
     const goToMainSite = () => {
-        try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+        try { 
+            localStorage.setItem(STORAGE_KEY, getTodayString()); 
+        } catch(e) {}
         const targetUrl = getTargetMainUrl();
         window.open(targetUrl, '_blank', 'noopener,noreferrer');
         removePopup();
@@ -218,40 +219,42 @@
         const closeX = document.querySelector('.nope-close-btn');
         const goBtn = document.getElementById('nope-go-main');
         const overlay = document.getElementById('nope-popup-overlay');
-        if (closeBtn) closeBtn.addEventListener('click', closeAndReset);
-        if (closeX) closeX.addEventListener('click', closeAndReset);
+        
+        if (closeBtn) closeBtn.addEventListener('click', closeAndSaveDate);
+        if (closeX) closeX.addEventListener('click', closeAndSaveDate);
         if (goBtn) goBtn.addEventListener('click', goToMainSite);
         if (overlay) overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeAndReset();
+            if (e.target === overlay) closeAndSaveDate();
         });
     };
 
-    // 展示弹窗
-    const showPopup = () => {
-        if (document.getElementById('nope-popup-overlay')) return;
-        injectStyles();
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = createPopupHTML();
-        const popupEl = wrapper.firstElementChild;
-        document.body.appendChild(popupEl);
-        bindEvents();
+    // 初始化逻辑
+    const init = () => {
+        // 如果已经是主站，直接退出
+        if (isAlreadyOnMainSite()) return;
+
+        // 检查今日是否已关闭过
+        try {
+            const savedDate = localStorage.getItem(STORAGE_KEY);
+            if (savedDate === getTodayString()) {
+                return; // 如果记录的日期是今天，直接拦截不弹窗
+            }
+        } catch (e) {}
+
+        // 执行弹窗渲染
+        setTimeout(() => {
+            injectStyles();
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = createPopupHTML();
+            document.body.appendChild(wrapper.firstElementChild);
+            bindEvents();
+        }, POPUP_DELAY);
     };
 
-    // 判断是否应该显示（主站不显示，非主站总是显示）
-    const shouldShowPopup = () => {
-        if (isAlreadyOnMainSite()) return false;
-        return true;
-    };
-
-    // 初始化
-    const initPopup = () => {
-        if (!shouldShowPopup()) return;
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => setTimeout(showPopup, POPUP_DELAY));
-        } else {
-            setTimeout(showPopup, POPUP_DELAY);
-        }
-    };
-
-    initPopup();
+    // 确保在 DOM 加载完成后运行
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 })();
