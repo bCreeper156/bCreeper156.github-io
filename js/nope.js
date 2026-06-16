@@ -1,7 +1,7 @@
 /**
- * nope.js - 全站统一弹窗组件（主站自动屏蔽版）
- * 功能：仅在非主站页面首次访问时弹窗，引导前往主站并同步当前路径。
- * 版本：2.1.0
+ * nope.js - 全站统一弹窗组件（主站自动屏蔽版 + 关闭后重置 + 主站文字纯文本）
+ * 功能：仅在非主站页面每次访问时弹窗，引导前往主站并同步当前路径。
+ * 版本：2.3.0
  */
 
 (function() {
@@ -26,7 +26,7 @@
         return currentHost === MAIN_SITE_DOMAIN || currentHost === `www.${MAIN_SITE_DOMAIN}`;
     }
 
-    // 弹窗 HTML（动态生成目标链接）
+    // 弹窗 HTML（主站文字为纯文本，无超链接）
     const createPopupHTML = () => {
         const targetUrl = getTargetMainUrl();
         return `
@@ -36,19 +36,19 @@
                 <div class="nope-popup-icon">✨</div>
                 <h3 class="nope-popup-title">发现更多精彩</h3>
                 <p class="nope-popup-message">
-                    前往 <a href="" target="_blank" rel="noopener noreferrer" class="nope-link">主站</a> 体验更多功能<br>
+                    前往 主站 体验更多功能<br>
                     <span style="font-size:0.8rem; opacity:0.7;">将自动跳转到当前页面</span>
                 </p>
                 <div class="nope-popup-actions">
                     <button class="nope-btn nope-btn-primary" id="nope-go-main">前往主站 →</button>
                     <button class="nope-btn nope-btn-secondary" id="nope-close-popup">暂不，关闭</button>
                 </div>
-                <p class="nope-popup-footnote">不再提示，关闭后将不会打扰您</p>
+                <p class="nope-popup-footnote">关闭后将重置，下次访问仍会提示</p>
             </div>
         </div>
     `;};
 
-    // 注入样式
+    // 注入样式（不变）
     const injectStyles = () => {
         const styleId = 'nope-popup-styles';
         if (document.getElementById(styleId)) return;
@@ -198,15 +198,15 @@
         if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
     };
 
-    // 关闭并永久记录
-    const closeAndRemember = () => {
-        try { localStorage.setItem(STORAGE_KEY, 'true'); } catch(e) {}
+    // 关闭弹窗并重置存储（删除键，下次仍会弹窗）
+    const closeAndReset = () => {
+        try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
         removePopup();
     };
 
-    // 前往主站（新标签页，同步路径）
+    // 前往主站（新标签页，同步路径）并重置存储
     const goToMainSite = () => {
-        try { localStorage.setItem(STORAGE_KEY, 'true'); } catch(e) {}
+        try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
         const targetUrl = getTargetMainUrl();
         window.open(targetUrl, '_blank', 'noopener,noreferrer');
         removePopup();
@@ -218,12 +218,12 @@
         const closeX = document.querySelector('.nope-close-btn');
         const goBtn = document.getElementById('nope-go-main');
         const overlay = document.getElementById('nope-popup-overlay');
-        const link = document.querySelector('.nope-link');
-        if (closeBtn) closeBtn.addEventListener('click', closeAndRemember);
-        if (closeX) closeX.addEventListener('click', closeAndRemember);
+        if (closeBtn) closeBtn.addEventListener('click', closeAndReset);
+        if (closeX) closeX.addEventListener('click', closeAndReset);
         if (goBtn) goBtn.addEventListener('click', goToMainSite);
-        if (link) link.addEventListener('click', () => { try { localStorage.setItem(STORAGE_KEY, 'true'); } catch(e) {} });
-        if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeAndRemember(); });
+        if (overlay) overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeAndReset();
+        });
     };
 
     // 展示弹窗
@@ -237,22 +237,9 @@
         bindEvents();
     };
 
-    // 判断是否应该显示（主站不显示 + 未永久关闭）
+    // 判断是否应该显示（主站不显示，非主站总是显示）
     const shouldShowPopup = () => {
-        if (isAlreadyOnMainSite()) return false;   // 主站直接屏蔽
-        try {
-            const hasShown = localStorage.getItem(STORAGE_KEY);
-            if (hasShown === 'true') return false;
-        } catch(e) {
-            try {
-                const sessionKey = 'nope_session_popup_shown';
-                if (sessionStorage.getItem(sessionKey)) return false;
-                sessionStorage.setItem(sessionKey, 'true');
-                return true;
-            } catch(err) {
-                return true;
-            }
-        }
+        if (isAlreadyOnMainSite()) return false;
         return true;
     };
 
