@@ -36,7 +36,7 @@
                 <div class="nope-popup-icon">✨</div>
                 <h3 class="nope-popup-title">发现更多精彩</h3>
                 <p class="nope-popup-message">
-                    前往 <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="nope-link">主站</a> 体验更多功能<br>
+                    前往 <a href="" target="_blank" rel="noopener noreferrer" class="nope-link">主站</a> 体验更多功能<br>
                     <span style="font-size:0.8rem; opacity:0.7;">将自动跳转到当前页面</span>
                 </p>
                 <div class="nope-popup-actions">
